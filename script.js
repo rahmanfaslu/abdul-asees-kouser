@@ -220,6 +220,110 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  /* ---------------- Branding badge + modal ---------------- */
+  const acBadge = document.getElementById('ac-badge');
+  const acModal = document.getElementById('ac-modal');
+
+  if (acBadge && acModal) {
+    /* Detect this site's theme from its own design tokens */
+    const rootCS = getComputedStyle(document.documentElement);
+    const token = (name, fb) => (rootCS.getPropertyValue(name) || '').trim() || fb;
+
+    const accent = token('--gold', '#C9A050');
+    const fonts = {
+      display: token('--font-display', "'Cormorant Garamond', serif"),
+      sub: token('--font-sub', "'Playfair Display', serif"),
+      body: token('--font-body', "'Poppins', sans-serif")
+    };
+
+    /* Detect background tone: light ivory vs dark theme */
+    const rgb = (getComputedStyle(document.body).backgroundColor || '').match(/[\d.]+/g);
+    let tone = 'light';
+    if (rgb) {
+      const r = +rgb[0], g = +rgb[1], b = +rgb[2];
+      const a = rgb[3] !== undefined ? +rgb[3] : 1;
+      if (a > 0 && (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5) tone = 'dark';
+    }
+
+    [acBadge, acModal].forEach(el => {
+      el.dataset.acTone = tone;
+      el.style.setProperty('--ac-accent', accent);
+      el.style.setProperty('--ac-font-display', fonts.display);
+      el.style.setProperty('--ac-font-sub', fonts.sub);
+      el.style.setProperty('--ac-font-body', fonts.body);
+    });
+
+    /* Badge state toggle: pill (hero) <-> compact icon (scrolled) */
+    const heroEl = document.getElementById('hero');
+    const mqMobile = window.matchMedia('(max-width: 640px)');
+    let pastHero = false;
+
+    const applyBadgeState = () => {
+      acBadge.classList.toggle('is-compact', pastHero || mqMobile.matches);
+    };
+
+    if ('IntersectionObserver' in window && heroEl) {
+      const io = new IntersectionObserver(entries => {
+        const e = entries[0];
+        if (!e || e.target !== heroEl) return;
+        pastHero = e.intersectionRatio <= 0.2;
+        applyBadgeState();
+      }, { threshold: [0, 0.2, 0.5, 1] });
+      io.observe(heroEl);
+    } else {
+      let ticking = false;
+      window.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          pastHero = window.scrollY > window.innerHeight * 0.8;
+          applyBadgeState();
+          ticking = false;
+        });
+      }, { passive: true });
+    }
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(applyBadgeState, 120);
+    });
+    applyBadgeState();
+
+    /* Modal open/close — only ever opened via the badge, never auto */
+    let lastFocused = null;
+
+    const openAcModal = () => {
+      lastFocused = document.activeElement;
+      acModal.classList.add('is-open');
+      acModal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      if (lenis) lenis.stop();
+      const closeBtn = acModal.querySelector('.ac-modal-close');
+      if (closeBtn) closeBtn.focus({ preventScroll: true });
+    };
+
+    const closeAcModal = () => {
+      acModal.classList.remove('is-open');
+      acModal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (lenis) lenis.start();
+      if (lastFocused && lastFocused.focus) lastFocused.focus({ preventScroll: true });
+    };
+
+    acBadge.addEventListener('click', openAcModal);
+
+    acModal.addEventListener('click', e => {
+      if (e.target === acModal || (e.target.closest && e.target.closest('[data-close]'))) {
+        closeAcModal();
+      }
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && acModal.classList.contains('is-open')) closeAcModal();
+    });
+  }
+
   /* First user interaction unlocks audio if autoplay was blocked */
   const unlockAudio = () => {
     if (!musicStarted && music) {
